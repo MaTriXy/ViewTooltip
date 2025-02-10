@@ -7,20 +7,28 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
-import android.os.Build;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.StringRes;
+import androidx.core.widget.NestedScrollView;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
+
 import android.text.Html;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
+import android.view.Window;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+
+import java.util.Arrays;
 
 /**
  * Created by florentchampigny on 02/06/2017.
@@ -28,19 +36,70 @@ import android.widget.TextView;
 
 public class ViewTooltip {
 
+    private View rootView;
     private final View view;
     private final TooltipView tooltip_view;
 
-    private ViewTooltip(View view) {
+    private ViewTooltip(MyContext myContext, View view) {
         this.view = view;
-        this.tooltip_view = new TooltipView(getActivityContext(view.getContext()));
+        this.tooltip_view = new TooltipView(myContext.getContext());
+        final NestedScrollView scrollParent = findScrollParent(view);
+        if (scrollParent != null) {
+            scrollParent.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
+                @Override
+                public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+                    tooltip_view.setTranslationY(tooltip_view.getTranslationY() - (scrollY - oldScrollY));
+                }
+            });
+        }
+    }
+
+    private ViewTooltip(MyContext myContext, View rootView, View view) {
+        this.rootView = rootView;
+        this.view = view;
+        this.tooltip_view = new TooltipView(myContext.getContext());
+        final NestedScrollView scrollParent = findScrollParent(view);
+        if (scrollParent != null) {
+            scrollParent.setOnScrollChangeListener(new NestedScrollView.OnScrollChangeListener() {
+                @Override
+                public void onScrollChange(NestedScrollView v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+                    tooltip_view.setTranslationY(tooltip_view.getTranslationY() - (scrollY - oldScrollY));
+                }
+            });
+        }
+    }
+
+    private ViewTooltip(View view) {
+        this(new MyContext(getActivityContext(view.getContext())), view);
     }
 
     public static ViewTooltip on(final View view) {
-        return new ViewTooltip(view);
+        return new ViewTooltip(new MyContext(getActivityContext(view.getContext())), view);
     }
 
-    public Activity getActivityContext(Context context) {
+    public static ViewTooltip on(Fragment fragment, final View view) {
+        return new ViewTooltip(new MyContext(fragment), view);
+    }
+
+    public static ViewTooltip on(Activity activity, final View view) {
+        return new ViewTooltip(new MyContext(getActivityContext(activity)), view);
+    }
+
+    public static ViewTooltip on(Activity activity, final View rootView, final View view) {
+        return new ViewTooltip(new MyContext(getActivityContext(activity)), rootView, view);
+    }
+
+    private NestedScrollView findScrollParent(View view) {
+        if (view.getParent() == null || !(view.getParent() instanceof View)) {
+            return null;
+        } else if (view.getParent() instanceof NestedScrollView) {
+            return ((NestedScrollView) view.getParent());
+        } else {
+            return findScrollParent(((View) view.getParent()));
+        }
+    }
+
+    private static Activity getActivityContext(Context context) {
         while (context instanceof ContextWrapper) {
             if (context instanceof Activity) {
                 return (Activity) context;
@@ -55,6 +114,16 @@ public class ViewTooltip {
         return this;
     }
 
+    public ViewTooltip withShadow(boolean withShadow) {
+        this.tooltip_view.setWithShadow(withShadow);
+        return this;
+    }
+
+    public ViewTooltip shadowColor(@ColorInt int shadowColor) {
+        this.tooltip_view.setShadowColor(shadowColor);
+        return this;
+    }
+
     public ViewTooltip customView(View customView) {
         this.tooltip_view.setCustomView(customView);
         return this;
@@ -62,6 +131,26 @@ public class ViewTooltip {
 
     public ViewTooltip customView(int viewId) {
         this.tooltip_view.setCustomView(((Activity) view.getContext()).findViewById(viewId));
+        return this;
+    }
+
+    public ViewTooltip arrowWidth(int arrowWidth) {
+        this.tooltip_view.setArrowWidth(arrowWidth);
+        return this;
+    }
+
+    public ViewTooltip arrowHeight(int arrowHeight) {
+        this.tooltip_view.setArrowHeight(arrowHeight);
+        return this;
+    }
+
+    public ViewTooltip arrowSourceMargin(int arrowSourceMargin) {
+        this.tooltip_view.setArrowSourceMargin(arrowSourceMargin);
+        return this;
+    }
+
+    public ViewTooltip arrowTargetMargin(int arrowTargetMargin) {
+        this.tooltip_view.setArrowTargetMargin(arrowTargetMargin);
         return this;
     }
 
@@ -73,17 +162,29 @@ public class ViewTooltip {
     public TooltipView show() {
         final Context activityContext = tooltip_view.getContext();
         if (activityContext != null && activityContext instanceof Activity) {
-            final ViewGroup decorView = (ViewGroup) ((Activity) activityContext).getWindow().getDecorView();
+            final ViewGroup decorView = rootView != null ?
+                    (ViewGroup) rootView :
+                    (ViewGroup) ((Activity) activityContext).getWindow().getDecorView();
+
             view.postDelayed(new Runnable() {
                 @Override
                 public void run() {
                     final Rect rect = new Rect();
                     view.getGlobalVisibleRect(rect);
 
+                    final Rect rootGlobalRect = new Rect();
+                    final Point rootGlobalOffset = new Point();
+                    decorView.getGlobalVisibleRect(rootGlobalRect, rootGlobalOffset);
+
                     int[] location = new int[2];
                     view.getLocationOnScreen(location);
                     rect.left = location[0];
-                    //rect.left = location[0];
+                    if (rootGlobalOffset != null) {
+                        rect.top -= rootGlobalOffset.y;
+                        rect.bottom -= rootGlobalOffset.y;
+                        rect.left -= rootGlobalOffset.x;
+                        rect.right -= rootGlobalOffset.x;
+                    }
 
                     decorView.addView(tooltip_view, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
 
@@ -118,6 +219,11 @@ public class ViewTooltip {
         return this;
     }
 
+    public ViewTooltip color(Paint paint) {
+        this.tooltip_view.setPaint(paint);
+        return this;
+    }
+
     public ViewTooltip onDisplay(ListenerDisplay listener) {
         this.tooltip_view.setListenerDisplay(listener);
         return this;
@@ -146,6 +252,11 @@ public class ViewTooltip {
         return this;
     }
 
+    public ViewTooltip text(@StringRes int text) {
+        this.tooltip_view.setText(text);
+        return this;
+    }
+
     public ViewTooltip corner(int corner) {
         this.tooltip_view.setCorner(corner);
         return this;
@@ -166,6 +277,11 @@ public class ViewTooltip {
         return this;
     }
 
+    public ViewTooltip margin(int left, int top, int right, int bottom) {
+        this.tooltip_view.setMargin(left, top, right, bottom);
+        return this;
+    }
+
     public ViewTooltip setTextGravity (int textGravity) {
         this.tooltip_view.setTextGravity(textGravity);
         return this;
@@ -182,6 +298,20 @@ public class ViewTooltip {
         return this;
     }
 
+    public ViewTooltip distanceWithView(int distance) {
+        this.tooltip_view.setDistanceWithView(distance);
+        return this;
+    }
+
+    public ViewTooltip border(int color,float width){
+        Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        borderPaint.setColor(color);
+        borderPaint.setStyle(Paint.Style.STROKE);
+        borderPaint.setStrokeWidth(width);
+        this.tooltip_view.setBorderPaint(borderPaint);
+        return this;
+    }
+
     public enum Position {
         LEFT,
         RIGHT,
@@ -192,6 +322,7 @@ public class ViewTooltip {
     public enum ALIGN {
         START,
         CENTER,
+        END
     }
 
     public interface TooltipAnimation {
@@ -234,12 +365,15 @@ public class ViewTooltip {
     public static class TooltipView extends FrameLayout {
 
         private static final int MARGIN_SCREEN_BORDER_TOOLTIP = 30;
-        private final int ARROW_HEIGHT = 15;
-        private final int ARROW_WIDTH = 15;
+        private int arrowHeight = 15;
+        private int arrowWidth = 15;
+        private int arrowSourceMargin = 0;
+        private int arrowTargetMargin = 0;
         protected View childView;
         private int color = Color.parseColor("#1F7C82");
         private Path bubblePath;
         private Paint bubblePaint;
+        private Paint borderPaint;
         private Position position = Position.BOTTOM;
         private ALIGN align = ALIGN.CENTER;
         private boolean clickToHide;
@@ -259,7 +393,17 @@ public class ViewTooltip {
         private int paddingRight = 30;
         private int paddingLeft = 30;
 
+        private int marginTop = 0;
+        private int marginBottom = 0;
+        private int marginRight = 0;
+        private int marginLeft = 0;
+
+        int shadowPadding = 4;
+        int shadowWidth = 8;
+
         private Rect viewRect;
+        private int distanceWithView = 0;
+        private int shadowColor = Color.parseColor("#aaaaaa");
 
         public TooltipView(Context context) {
             super(context);
@@ -273,6 +417,13 @@ public class ViewTooltip {
             bubblePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             bubblePaint.setColor(color);
             bubblePaint.setStyle(Paint.Style.FILL);
+
+            borderPaint = null;
+
+            setLayerType(LAYER_TYPE_SOFTWARE, bubblePaint);
+
+            setWithShadow(true);
+
         }
 
         public void setCustomView(View customView) {
@@ -287,20 +438,41 @@ public class ViewTooltip {
             postInvalidate();
         }
 
+        public void setShadowColor(int color) {
+            this.shadowColor = color;
+            postInvalidate();
+        }
+
+        public void setMargin(int left, int top, int right, int bottom) {
+            this.marginLeft = left;
+            this.marginTop = top;
+            this.marginRight = right;
+            this.marginBottom = top;
+
+            childView.setPadding(childView.getPaddingLeft() + left, childView.getPaddingTop() + top, childView.getPaddingRight() + right, childView.getPaddingBottom() + bottom);
+            postInvalidate();
+        }
+
+        public void setPaint(Paint paint) {
+            bubblePaint = paint;
+            setLayerType(LAYER_TYPE_SOFTWARE, paint);
+            postInvalidate();
+        }
+
         public void setPosition(Position position) {
             this.position = position;
             switch (position){
                 case TOP:
-                    setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom + ARROW_HEIGHT);
+                    setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom + arrowHeight);
                     break;
                 case BOTTOM:
-                    setPadding(paddingLeft, paddingTop + ARROW_HEIGHT, paddingRight, paddingBottom);
+                    setPadding(paddingLeft, paddingTop + arrowHeight, paddingRight, paddingBottom);
                     break;
                 case LEFT:
-                    setPadding(paddingLeft, paddingTop, paddingRight + ARROW_HEIGHT, paddingBottom);
+                    setPadding(paddingLeft, paddingTop, paddingRight + arrowHeight, paddingBottom);
                     break;
                 case RIGHT:
-                    setPadding(paddingLeft + ARROW_HEIGHT, paddingTop, paddingRight, paddingBottom);
+                    setPadding(paddingLeft + arrowHeight, paddingTop, paddingRight, paddingBottom);
                     break;
             }
             postInvalidate();
@@ -318,10 +490,53 @@ public class ViewTooltip {
             postInvalidate();
         }
 
+        public void setText(int text) {
+            if (childView instanceof TextView) {
+                ((TextView) this.childView).setText(text);
+            }
+            postInvalidate();
+        }
+
         public void setTextColor(int textColor) {
             if (childView instanceof TextView) {
                 ((TextView) this.childView).setTextColor(textColor);
             }
+            postInvalidate();
+        }
+
+        public int getArrowHeight() {
+            return arrowHeight;
+        }
+
+        public void setArrowHeight(int arrowHeight) {
+            this.arrowHeight = arrowHeight;
+            postInvalidate();
+        }
+
+        public int getArrowWidth() {
+            return arrowWidth;
+        }
+
+        public void setArrowWidth(int arrowWidth) {
+            this.arrowWidth = arrowWidth;
+            postInvalidate();
+        }
+
+        public int getArrowSourceMargin() {
+            return arrowSourceMargin;
+        }
+
+        public void setArrowSourceMargin(int arrowSourceMargin) {
+            this.arrowSourceMargin = arrowSourceMargin;
+            postInvalidate();
+        }
+
+        public int getArrowTargetMargin() {
+            return arrowTargetMargin;
+        }
+
+        public void setArrowTargetMargin(int arrowTargetMargin) {
+            this.arrowTargetMargin = arrowTargetMargin;
             postInvalidate();
         }
 
@@ -358,60 +573,7 @@ public class ViewTooltip {
         protected void onSizeChanged(int width, int height, int oldw, int oldh) {
             super.onSizeChanged(width, height, oldw, oldh);
 
-            bubblePath = drawBubble(new RectF(0, 0, width, height), corner, corner, corner, corner);
-
-            /*
-            float x = 0;
-            float y = 0;
-
-            switch (position) {
-                case TOP: {
-                    bubblePath.moveTo(x, y);
-                    bubblePath.lineTo((x = width), y);
-                    bubblePath.lineTo(x, (y = height - ARROW_HEIGHT));
-                    bubblePath.lineTo((x = width / 2f + ARROW_WIDTH), y);
-                    bubblePath.lineTo((x = width / 2f), (y = height));
-                    bubblePath.lineTo((x = width / 2f - ARROW_WIDTH), (y = height - ARROW_HEIGHT));
-                    bubblePath.lineTo((x = 0), y);
-                    bubblePath.lineTo((x = 0), y);
-                    bubblePath.close();
-                }
-                break;
-                case BOTTOM: {
-                    bubblePath.moveTo(x, (y = ARROW_HEIGHT));
-                    bubblePath.lineTo((x = width / 2f - ARROW_WIDTH), y);
-                    bubblePath.lineTo((x = width / 2f), (y = 0));
-                    bubblePath.lineTo((x = width / 2f + ARROW_WIDTH), (y = ARROW_HEIGHT));
-                    bubblePath.lineTo((x = width), y);
-                    bubblePath.lineTo(x, (y = height));
-                    bubblePath.lineTo((x = 0), y);
-                    bubblePath.close();
-                }
-                break;
-                case LEFT: {
-                    bubblePath.moveTo(x, y);
-                    bubblePath.lineTo((x = width - ARROW_HEIGHT), y);
-                    bubblePath.lineTo(x, (y = height / 2 - ARROW_WIDTH));
-                    bubblePath.lineTo((x = width - ARROW_HEIGHT), (y = height / 2 - ARROW_WIDTH));
-                    bubblePath.lineTo((x = width), (y = height / 2));
-                    bubblePath.lineTo((x = width - ARROW_HEIGHT), (y = height / 2 + ARROW_WIDTH));
-                    bubblePath.lineTo(x, (y = height));
-                    bubblePath.lineTo((x = 0), y);
-                    bubblePath.close();
-                }
-                break;
-                case RIGHT: {
-                    bubblePath.moveTo((x = ARROW_HEIGHT), y);
-                    bubblePath.lineTo((x = width), y);
-                    bubblePath.lineTo(x, (y = height));
-                    bubblePath.lineTo((x = ARROW_HEIGHT), y);
-                    bubblePath.lineTo(x, (y = height / 2 + ARROW_WIDTH));
-                    bubblePath.lineTo((x = 0), (y = height / 2));
-                    bubblePath.lineTo((x = ARROW_HEIGHT), (y = height / 2 - ARROW_WIDTH));
-                    bubblePath.close();
-                }
-                break;
-            }*/
+            bubblePath = drawBubble(new RectF(shadowPadding, shadowPadding, width - shadowPadding * 2, height - shadowPadding * 2), corner, corner, corner, corner);
         }
 
         @Override
@@ -420,6 +582,9 @@ public class ViewTooltip {
 
             if (bubblePath != null) {
                 canvas.drawPath(bubblePath, bubblePaint);
+                if(borderPaint != null){
+                    canvas.drawPath(bubblePath,borderPaint);
+                }
             }
         }
 
@@ -487,10 +652,7 @@ public class ViewTooltip {
                 @Override
                 public void onAnimationEnd(Animator animation) {
                     super.onAnimationEnd(animation);
-                    if (getParent() != null) {
-                        final ViewGroup parent = ((ViewGroup) getParent());
-                        parent.removeView(TooltipView.this);
-                    }
+                    removeNow();
                 }
             });
         }
@@ -505,55 +667,35 @@ public class ViewTooltip {
 
         public void setupPosition(Rect rect) {
 
+            int x, y;
+
             if (position == Position.LEFT || position == Position.RIGHT) {
-
-                final int myHeight = getHeight();
-                final int hisHeight = rect.height();
-
-                final int maxHeight = Math.max(hisHeight, myHeight);
-                final int minHeight = Math.min(hisHeight, myHeight);
-
-                int spacingY = 0;
-                switch (align) {
-                    case START:
-                        spacingY = 0;
-                        break;
-                    //case END:
-                    //    spacingY = maxHeight - minHeight;
-                    //    break;
-                    case CENTER:
-                        spacingY = (int) (-1f * maxHeight / 2f + minHeight / 2f);
-                        break;
-                }
-
                 if (position == Position.LEFT) {
-                    setTranslationY(rect.top + spacingY);
-                    setTranslationX(rect.left - getWidth());
+                    x = rect.left - getWidth() - distanceWithView;
                 } else {
-                    setTranslationY(rect.top + spacingY);
-                    setTranslationX(rect.right);
+                    x = rect.right + distanceWithView;
                 }
-
+                y = rect.top + getAlignOffset(getHeight(), rect.height());
             } else {
-                int spacingX = 0;
-
-                final int myWidth = getWidth();
-                final int hisWidth = rect.width();
-
-                if (align == ALIGN.CENTER) {
-                    spacingX = (int) (hisWidth / 2f - 1f * myWidth / 2f);
-                }
-
                 if (position == Position.BOTTOM) {
-                    setTranslationY(rect.bottom);
-                    setTranslationX(rect.left + spacingX);
-                } else {
-                    setTranslationY(rect.top - getHeight());
-                    setTranslationX(rect.left + spacingX);
+                    y = rect.bottom + distanceWithView;
+                } else { // top
+                    y = rect.top - getHeight() - distanceWithView;
                 }
+                x = rect.left + getAlignOffset(getWidth(), rect.width());
             }
+
+            setTranslationX(x);
+            setTranslationY(y);
         }
 
+        private int getAlignOffset(int myLength, int hisLength) {
+            switch (align) {
+                case END:    return hisLength - myLength;
+                case CENTER: return (hisLength - myLength) / 2;
+            }
+            return 0;
+        }
 
         private Path drawBubble(RectF myRect, float topLeftDiameter, float topRightDiameter, float bottomRightDiameter, float bottomLeftDiameter) {
             final Path path = new Path();
@@ -566,10 +708,10 @@ public class ViewTooltip {
             bottomLeftDiameter = bottomLeftDiameter < 0 ? 0 : bottomLeftDiameter;
             bottomRightDiameter = bottomRightDiameter < 0 ? 0 : bottomRightDiameter;
 
-            final float spacingLeft = this.position == Position.RIGHT ? ARROW_HEIGHT : 0;
-            final float spacingTop = this.position == Position.BOTTOM ? ARROW_HEIGHT : 0;
-            final float spacingRight = this.position == Position.LEFT ? ARROW_HEIGHT : 0;
-            final float spacingBottom = this.position == Position.TOP ? ARROW_HEIGHT : 0;
+            final float spacingLeft = this.position == Position.RIGHT ? arrowHeight : marginLeft;
+            final float spacingTop = this.position == Position.BOTTOM ? arrowHeight : marginTop;
+            final float spacingRight = this.position == Position.LEFT ? arrowHeight : marginRight;
+            final float spacingBottom = this.position == Position.TOP ? arrowHeight : marginBottom;
 
             final float left = spacingLeft + myRect.left;
             final float top = spacingTop + myRect.top;
@@ -577,13 +719,26 @@ public class ViewTooltip {
             final float bottom = myRect.bottom - spacingBottom;
             final float centerX = viewRect.centerX() - getX();
 
+            final float arrowSourceX = (Arrays.asList(Position.TOP, Position.BOTTOM).contains(this.position))
+                    ? centerX + arrowSourceMargin
+                    : centerX;
+            final float arrowTargetX = (Arrays.asList(Position.TOP, Position.BOTTOM).contains(this.position))
+                    ? centerX + arrowTargetMargin
+                    : centerX;
+            final float arrowSourceY = (Arrays.asList(Position.RIGHT, Position.LEFT).contains(this.position))
+                    ? bottom / 2f - arrowSourceMargin
+                    : bottom / 2f;
+            final float arrowTargetY = (Arrays.asList(Position.RIGHT, Position.LEFT).contains(this.position))
+                    ? bottom / 2f - arrowTargetMargin
+                    : bottom / 2f;
+
             path.moveTo(left + topLeftDiameter / 2f, top);
             //LEFT, TOP
 
             if (position == Position.BOTTOM) {
-                path.lineTo(centerX - ARROW_WIDTH, top);
-                path.lineTo(centerX, myRect.top);
-                path.lineTo(centerX + ARROW_WIDTH, top);
+                path.lineTo(arrowSourceX - arrowWidth, top);
+                path.lineTo(arrowTargetX, myRect.top);
+                path.lineTo(arrowSourceX + arrowWidth, top);
             }
             path.lineTo(right - topRightDiameter / 2f, top);
 
@@ -591,9 +746,9 @@ public class ViewTooltip {
             //RIGHT, TOP
 
             if (position == Position.LEFT) {
-                path.lineTo(right, bottom / 2f - ARROW_WIDTH);
-                path.lineTo(myRect.right, bottom / 2f);
-                path.lineTo(right, bottom / 2f + ARROW_WIDTH);
+                path.lineTo(right, arrowSourceY - arrowWidth);
+                path.lineTo(myRect.right, arrowTargetY);
+                path.lineTo(right, arrowSourceY + arrowWidth);
             }
             path.lineTo(right, bottom - bottomRightDiameter / 2);
 
@@ -601,9 +756,9 @@ public class ViewTooltip {
             //RIGHT, BOTTOM
 
             if (position == Position.TOP) {
-                path.lineTo(centerX + ARROW_WIDTH, bottom);
-                path.lineTo(centerX, myRect.bottom);
-                path.lineTo(centerX - ARROW_WIDTH, bottom);
+                path.lineTo(arrowSourceX + arrowWidth, bottom);
+                path.lineTo(arrowTargetX, myRect.bottom);
+                path.lineTo(arrowSourceX - arrowWidth, bottom);
             }
             path.lineTo(left + bottomLeftDiameter / 2, bottom);
 
@@ -611,9 +766,9 @@ public class ViewTooltip {
             //LEFT, BOTTOM
 
             if (position == Position.RIGHT) {
-                path.lineTo(left, bottom / 2f + ARROW_WIDTH);
-                path.lineTo(myRect.left, bottom / 2f);
-                path.lineTo(left, bottom / 2f - ARROW_WIDTH);
+                path.lineTo(left, arrowSourceY + arrowWidth);
+                path.lineTo(myRect.left, arrowTargetY);
+                path.lineTo(left, arrowSourceY - arrowWidth);
             }
             path.lineTo(left, top + topLeftDiameter / 2);
 
@@ -625,29 +780,52 @@ public class ViewTooltip {
         }
 
         public boolean adjustSize(Rect rect, int screenWidth) {
+
+            final Rect r = new Rect();
+            getGlobalVisibleRect(r);
+
             boolean changed = false;
             final ViewGroup.LayoutParams layoutParams = getLayoutParams();
             if (position == Position.LEFT && getWidth() > rect.left) {
-                layoutParams.width = rect.left - MARGIN_SCREEN_BORDER_TOOLTIP;
+                layoutParams.width = rect.left - MARGIN_SCREEN_BORDER_TOOLTIP - distanceWithView;
                 changed = true;
             } else if (position == Position.RIGHT && rect.right + getWidth() > screenWidth) {
-                layoutParams.width = screenWidth - rect.right - MARGIN_SCREEN_BORDER_TOOLTIP;
+                layoutParams.width = screenWidth - rect.right - MARGIN_SCREEN_BORDER_TOOLTIP - distanceWithView;
                 changed = true;
             } else if (position == Position.TOP || position == Position.BOTTOM) {
-                float widthRight = (getWidth() - rect.width()) / 2f;
-                if(rect.right + widthRight > screenWidth) {
-                    final float movinX = (rect.right + widthRight) - screenWidth + 30;
-                    rect.left -= movinX;
-                    rect.right -= movinX;
+                int adjustedLeft = rect.left;
+                int adjustedRight = rect.right;
+
+                if((rect.centerX() + getWidth() / 2f) > screenWidth){
+                    float diff = (rect.centerX() + getWidth() / 2f) - screenWidth;
+
+                    adjustedLeft -=  diff;
+                    adjustedRight -=  diff;
+
+                    setAlign(ALIGN.CENTER);
+                    changed = true;
+                }else if((rect.centerX() - getWidth() / 2f) < 0){
+                    float diff = -(rect.centerX() - getWidth() / 2f);
+
+                    adjustedLeft +=  diff;
+                    adjustedRight +=  diff;
+
+                    setAlign(ALIGN.CENTER);
                     changed = true;
                 }
-                else if(rect.left - widthRight < 0) {
-                    final float movinX = 0 - (rect.left - widthRight) + 30;
-                    rect.left += movinX;
-                    rect.right += movinX;
-                    changed = true;
+
+                if(adjustedLeft < 0){
+                    adjustedLeft = 0;
                 }
+
+                if(adjustedRight > screenWidth){
+                    adjustedRight = screenWidth;
+                }
+
+                rect.left = adjustedLeft;
+                rect.right = adjustedRight;
             }
+
             setLayoutParams(layoutParams);
             postInvalidate();
             return changed;
@@ -656,8 +834,7 @@ public class ViewTooltip {
         private void onSetup(Rect myRect) {
             setupPosition(myRect);
 
-            bubblePath = drawBubble(new RectF(0, 0, getWidth(), getHeight()), corner, corner, corner, corner);
-
+            bubblePath = drawBubble(new RectF(shadowPadding, shadowPadding, getWidth() - shadowPadding * 2f, getHeight() - shadowPadding * 2f), corner, corner, corner, corner);
             startEnterAnimation();
 
             handleAutoRemove();
@@ -684,6 +861,80 @@ public class ViewTooltip {
 
         public void close() {
             remove();
+        }
+
+        public void removeNow() {
+            if (getParent() != null) {
+                final ViewGroup parent = ((ViewGroup) getParent());
+                parent.removeView(TooltipView.this);
+            }
+        }
+
+        public void closeNow() {
+            removeNow();
+        }
+
+        public void setWithShadow(boolean withShadow) {
+            if(withShadow){
+                bubblePaint.setShadowLayer(shadowWidth, 0, 0, shadowColor);
+            } else {
+                bubblePaint.setShadowLayer(0, 0, 0, Color.TRANSPARENT);
+            }
+        }
+
+        public void setDistanceWithView(int distanceWithView) {
+            this.distanceWithView = distanceWithView;
+        }
+
+        public void setBorderPaint(Paint borderPaint) {
+            this.borderPaint = borderPaint;
+            postInvalidate();
+        }
+    }
+
+    public static class MyContext {
+        private Fragment fragment;
+        private Context context;
+        private Activity activity;
+
+        public MyContext(Activity activity) {
+            this.activity = activity;
+        }
+
+        public MyContext(Fragment fragment) {
+            this.fragment = fragment;
+        }
+
+        public MyContext(Context context) {
+            this.context = context;
+        }
+
+        public Context getContext() {
+            if (activity != null) {
+                return activity;
+            } else {
+                return ((Context) fragment.getActivity());
+            }
+        }
+
+        public Activity getActivity() {
+            if (activity != null) {
+                return activity;
+            } else {
+                return fragment.getActivity();
+            }
+        }
+
+
+        public Window getWindow() {
+            if (activity != null) {
+                return activity.getWindow();
+            } else {
+                if (fragment instanceof DialogFragment) {
+                    return ((DialogFragment) fragment).getDialog().getWindow();
+                }
+                return fragment.getActivity().getWindow();
+            }
         }
     }
 }

@@ -1,3 +1,6 @@
 #!/usr/bin/env bash
-./gradlew clean assembleDebug install
-./gradlew bintrayUpload
+. ~/.bash_profile
+./gradlew clean
+./gradlew :viewtooltip:assembleDebug
+./gradlew :viewtooltip:install
+./gradlew :viewtooltip:bintrayUpload

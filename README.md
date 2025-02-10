@@ -4,7 +4,7 @@
 
 ```java
 ViewTooltip
-        .on(editText)
+        .on(this, editText)
         .autoHide(true, 1000)
         .corner(30)
         .position(ViewTooltip.Position.RIGHT)
@@ -12,9 +12,10 @@ ViewTooltip
         .show();
 ```
 
-<a target='_blank' rel='nofollow' href='https://app.codesponsor.io/link/iqkQGAc2EFNdScAzpwZr1Sdy/florent37/ViewTooltip'>
-  <img alt='Sponsor' width='888' height='68' src='https://app.codesponsor.io/embed/iqkQGAc2EFNdScAzpwZr1Sdy/florent37/ViewTooltip.svg' />
+<a href="https://goo.gl/WXW8Dc">
+  <img alt="Android app on Google Play" src="https://developer.android.com/images/brand/en_app_rgb_wo_45.png" />
 </a>
+
 
 # Download
 
@@ -23,7 +24,7 @@ ViewTooltip
 [ ![Download](https://api.bintray.com/packages/florent37/maven/viewtooltip/images/download.svg) ](https://bintray.com/florent37/maven/viewtooltip/_latestVersion)
 ```java
 dependencies {
-    compile 'com.github.florent37:viewtooltip:1.0.8'
+    implementation 'com.github.florent37:viewtooltip:(last version)'
 }
 ```
 
@@ -33,7 +34,7 @@ dependencies {
 
 ```java
 ViewTooltip
-        .on(editText)
+        .on(this, editText)
         
         .autoHide(true / false, 1000)
         .clickToHide(true / false)
@@ -48,6 +49,11 @@ ViewTooltip
         .color(Color.BLACK)
         
         .corner(10)
+
+        .arrowWidth(15)
+        .arrowHeight(15)
+
+        .distanceWithView(0)
         
         //change the opening animation
         .animation(new ViewTooltip.TooltipAnimation(){...})
@@ -77,6 +83,26 @@ it will automatically adjust his size
 
 # History
 
+# 1.2.0
+- Compatible with AndroidX
+
+# 1.1.7
+- Set text as Int
+- Added shadowColor
+
+# 1.1.5
+- Use Fragment V4
+- Added aistanceWithView
+
+# 1.1.4
+- Added arrowWidth / arrowHeight
+
+## 1.1.3
+- Fix align bottom, text out of screen
+
+## 1.1.1
+- Added shadow
+
 ## 1.0.8 
 - Clip tooltip to screen (top / bottom) 
 - Text format HTML
@@ -96,13 +122,16 @@ it will automatically adjust his size
 
 # Credits   
 
-Author: Florent Champigny [http://www.florentchampigny.com/](http://www.florentchampigny.com/)
+Author: Florent Champigny 
 
 Blog : [http://www.tutos-android-france.com/](http://www.www.tutos-android-france.com/)
 
-<a href="https://play.google.com/store/apps/details?id=com.github.florent37.florent.champigny">
+Fiches Plateau Moto : [https://www.fiches-plateau-moto.fr/](https://www.fiches-plateau-moto.fr/)
+
+<a href="https://goo.gl/WXW8Dc">
   <img alt="Android app on Google Play" src="https://developer.android.com/images/brand/en_app_rgb_wo_45.png" />
 </a>
+
 <a href="https://plus.google.com/+florentchampigny">
   <img alt="Follow me on Google+"
        src="https://raw.githubusercontent.com/florent37/DaVinci/master/mobile/src/main/res/drawable-hdpi/gplus.png" />
@@ -115,6 +144,12 @@ Blog : [http://www.tutos-android-france.com/](http://www.www.tutos-android-franc
   <img alt="Follow me on LinkedIn"
        src="https://raw.githubusercontent.com/florent37/DaVinci/master/mobile/src/main/res/drawable-hdpi/linkedin.png" />
 </a>
+
+
+## Third Party Bindings
+
+### React Native
+You may now use this library with [React Native](https://github.com/facebook/react-native) via the module [here](https://github.com/prscX/react-native-tooltips)
 
 
 License
